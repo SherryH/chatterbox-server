@@ -14,38 +14,42 @@ this file and include it in basic-server.js so that it actually works.
 var url = require('url');
 
 var messages = [];
+var statusCode;
+var objectId = 1;
+
+var collectData = function(request, callback) {
+  var data = '';
+  request.on('data', function(chunk) {
+    data += chunk;
+    // console.log('chunk', chunk);
+  });
+  request.on('end', function() {
+    callback(JSON.parse(data));
+  });
+};
 
 var preparePostResponse = function(request, response, headers) {
   // var data = '';
   statusCode = 201;
   response.writeHead(statusCode, headers);
-
+  objectId++;
 
   response.end(JSON.stringify(
     {
       createdAt: Date.now(),
-      objectId: 'temp'
+      objectId: objectId
     }
   //change createdAt back to unique string e.g. createdAt.toString()
   ));
-
-  // req.on('data', function(chunk) {
-  //   // data += chunk;
-  //   // console.log('chunk', chunk);
-  // });
-  // req.on('end', function() {
-  //   console.log('data:', JSON.parse(data));
-  // });
 };
 
-var prepareGetResponse = function(request, response, headers) {
+var prepareGetResponse = function(request, response, headers, messages) {
   var pathname = url.parse(request.url).pathname;
   statusCode = 200;
+  var jsonMsg = JSON.stringify({results: messages});
   response.writeHead(statusCode, headers);
-  response.end(JSON.stringify({
-    results: messages
-  }
-  ));
+  console.log('messages: ', messages);
+  response.end(jsonMsg);
 
 };
 
@@ -70,7 +74,6 @@ var requestHandler = function(request, response) {
 
   //console.log(request);
 
-  // The outgoing status.
 
 
   var defaultCorsHeaders = {
@@ -83,9 +86,11 @@ var requestHandler = function(request, response) {
   // See the note below about CORS headers.
   var headers = defaultCorsHeaders;
 
-
-
-
+  // The outgoing status.
+  if (pathname !== '/classes/messages' && pathname !== '/classes/room') {
+    response.writeHead(404, headers);
+    response.end('404 not found');
+  }
   // Tell the client we are sending them plain text.
   //
   // You will need to change this if you are sending something
@@ -94,13 +99,22 @@ var requestHandler = function(request, response) {
 
   // .writeHead() writes to the request line and headers of the response,
   // which includes the status and all headers.
-  var statusCode = 200;
+
 
   console.log('request method', request.method);
   if (request.method === 'POST') {
-    preparePostResponse(request, response, headers);
+    collectData(request, function(message) {
+      messages.push(message);
+      preparePostResponse(request, response, headers);
+    });
   } else if (request.method === 'GET') {
-    prepareGetResponse(request, response, headers);
+    prepareGetResponse(request, response, headers, messages);
+  } else if (request.method === 'OPTIONS') {
+    response.writeHead(200, headers);
+    response.end();
+  } else {
+    response.writeHead(501, headers);
+    response.end('We have not yet implemented that method');
   }
   // Make sure to always call response.end() - Node may not send
   // anything back to the client until you do. The string you pass to
@@ -111,7 +125,6 @@ var requestHandler = function(request, response) {
   // node to actually send all the data over to the client.
 
   // response.end(data);
-  response.end();
 };
 
 // These headers will allow Cross-Origin Resource Sharing (CORS).
